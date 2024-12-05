@@ -1,0 +1,7 @@
+@PACKAGE_INIT@
+include(CMakeFindDependencyMacro)
+
+include("${CMAKE_CURRENT_LIST_DIR}/hrsdkTargets.cmake")
+
+set(hiwin_robot_client_library_LIBRARIES hiwin_robot_client_library::hrsdk)
+get_target_property(hiwin_robot_client_library_INCLUDE_DIRS hiwin_robot_client_library::hrsdk INTERFACE_INCLUDE_DIRECTORIES)
