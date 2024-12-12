@@ -80,10 +80,16 @@ public:
   int getActualRPM(double (&velocities)[6]);
   int getActualPosition(double (&positions)[6]);
   int getActualCurrent(double (&efforts)[6]);
-  int getMotionState(MotionStatus& status);
-  int getErrorCode(std::vector<std::string>& error_code);
 
-  int ptpJoint(double (&positions)[6], double ratio);
+  int getExtActualRPM(double (&velocities)[3]);
+  int getExtActualPosition(double (&positions)[3]);
+
+  int getMotionState(MotionStatus& status);
+  int getErrorCode(std::vector<std::string>& error_list);
+
+  int ptpJoint(double* positions, double ratio);
+  int extPtpJoint(double* positions);
+
   int motionAbort();
   int setPtpSpeed(int ratio);
   int getPtpSpeed(int& ratio);

@@ -73,6 +73,7 @@ public:
   void getJointEffort(std::vector<double>& efforts);
   void getJointPosition(std::vector<double>& positions);
   void getRobotMode(ControlMode& mode);
+  void getErrorCode(int32_t& error_code);
   bool isEstopped();
   bool isDrivesPowered();
   bool isMotionPossible();

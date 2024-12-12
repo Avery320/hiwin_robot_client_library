@@ -64,7 +64,10 @@ enum class CommandId : uint16_t
   SetRobotMode = 0x058C,
   GetRobotMode = 0x058D,
   PtpJoint = 0x07D6,
+  ExtPtpJoint = 0x07EF,
   MotionAbort = 0x07FA,
+  GetExtActualRPM = 0x0863,
+  GetExtActualPosition = 0x0864,
   GetActualPosition = 0x0866,
   GetActualRPM = 0x0867,
   GetErrorCode = 0x086C,
@@ -275,6 +278,64 @@ int Commander::getActualCurrent(double (&efforts)[6])
   return r.result;
 }
 
+int Commander::getExtActualRPM(double (&velocities)[3])
+{
+  size_t written;
+  Commandformat w = {};
+  const uint8_t* data_w = static_cast<const uint8_t*>(static_cast<void*>(&w));
+
+  w.cmd_id = static_cast<uint16_t>(CommandId::GetExtActualRPM);
+  TCPClient::write(data_w, sizeof(Commandformat), written);
+
+  size_t read_chars;
+  Responseformat r = {};
+  uint8_t* data_r = static_cast<uint8_t*>(static_cast<void*>(&r));
+
+  TCPClient::read(data_r, sizeof(Responseformat), read_chars);
+  if (r.result != 0)
+  {
+    return r.result;
+  }
+
+  uint16_t data_length = r.data[0];
+  int32_t value;
+  for (size_t i = 0; i < 3; i++)
+  {
+    memcpy(&value, ((data_r + 6) + (i * 4)), sizeof(int32_t));
+    velocities[i] = value / 1000.0;
+  }
+  return r.result;
+}
+
+int Commander::getExtActualPosition(double (&positions)[3])
+{
+  size_t written;
+  Commandformat w = {};
+  const uint8_t* data_w = static_cast<const uint8_t*>(static_cast<void*>(&w));
+
+  w.cmd_id = static_cast<uint16_t>(CommandId::GetExtActualPosition);
+  TCPClient::write(data_w, sizeof(Commandformat), written);
+
+  size_t read_chars;
+  Responseformat r = {};
+  uint8_t* data_r = static_cast<uint8_t*>(static_cast<void*>(&r));
+
+  TCPClient::read(data_r, sizeof(Responseformat), read_chars);
+  if (r.result != 0)
+  {
+    return r.result;
+  }
+
+  int32_t value;
+  uint16_t data_length = r.data[0];
+  for (size_t i = 0; i < 3; i++)
+  {
+    memcpy(&value, ((data_r + 6) + (i * 4)), sizeof(int32_t));
+    positions[i] = (value / 1000.0) * (M_PI / 180);
+  }
+  return r.result;
+}
+
 int Commander::getActualPosition(double (&positions)[6])
 {
   size_t written;
@@ -329,7 +390,7 @@ int Commander::getMotionState(MotionStatus& status)
   return r.result;
 }
 
-int Commander::getErrorCode(std::vector<std::string>& error_code)
+int Commander::getErrorCode(std::vector<std::string>& error_list)
 {
   size_t written;
   Commandformat w = {};
@@ -352,7 +413,7 @@ int Commander::getErrorCode(std::vector<std::string>& error_code)
   uint16_t count = data_length >> 2;
   uint16_t first, second, thrid;
   char buffer[12];
-  error_code.clear();
+  error_list.clear();
   for (size_t i = 0; i < count; i++)
   {
     first = r.data[i * 4 + 4] & 0x00FF;
@@ -360,12 +421,12 @@ int Commander::getErrorCode(std::vector<std::string>& error_code)
     thrid = (r.data[i * 4 + 3] & 0x00FF);
 
     sprintf(buffer, "Err%02x-%02x-%02x", first, second, thrid);
-    error_code.push_back(std::string(buffer));
+    error_list.push_back(std::string(buffer));
   }
   return r.result;
 }
 
-int Commander::ptpJoint(double (&positions)[6], double ratio)
+int Commander::ptpJoint(double* positions, double ratio)
 {
   size_t written;
   Commandformat w = {};
@@ -392,6 +453,42 @@ int Commander::ptpJoint(double (&positions)[6], double ratio)
     deg_integer = static_cast<int>(std::round(pos_deg));
     memcpy(&w.param[(i * 2) + 5], &deg_integer, sizeof(int32_t));
   }
+  TCPClient::write(data_w, sizeof(Commandformat), written);
+
+  size_t read_chars;
+  Responseformat r = {};
+  uint8_t* data_r = static_cast<uint8_t*>(static_cast<void*>(&r));
+
+  TCPClient::read(data_r, sizeof(Responseformat), read_chars);
+  return r.result;
+}
+
+int Commander::extPtpJoint(double* positions)
+{
+  size_t written;
+  Commandformat w = {};
+  const uint8_t* data_w = static_cast<const uint8_t*>(static_cast<void*>(&w));
+
+  w.cmd_id = static_cast<uint16_t>(CommandId::ExtPtpJoint);
+
+  // Smooth on between the points
+  w.param[0] = 1;
+
+  //
+  std::string pos_str = "";
+  for (size_t i = 0; i < 9; i++)
+  {
+    if (i != 0)
+    {
+      pos_str += ",";
+    }
+    std::stringstream stream;
+    stream << std::fixed << std::setprecision(7) << (positions[i] * (180 / M_PI));
+    pos_str += stream.str();
+  }
+  w.param[1] = pos_str.length();
+  std::copy(pos_str.begin(), pos_str.end(), &w.param[2]);
+
   TCPClient::write(data_w, sizeof(Commandformat), written);
 
   size_t read_chars;

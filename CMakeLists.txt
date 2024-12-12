@@ -39,8 +39,8 @@ install(EXPORT hrsdk_targets
 include(CMakePackageConfigHelpers)
 write_basic_package_version_file(
   "${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}ConfigVersion.cmake"
-  VERSION 0.0.1
-  COMPATIBILITY SameMajorVersion
+  VERSION 0.0.2
+  COMPATIBILITY ExactVersion
 )
 configure_file(
   hiwin_robot_client_libraryConfig.cmake.in
