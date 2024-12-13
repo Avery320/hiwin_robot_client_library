@@ -63,8 +63,10 @@ public:
   HIWINDriver(const std::string& robot_ip);
   ~HIWINDriver();
 
-  bool connect();     // Connect to the robot
-  void disconnect();  // Disconnect from the robot
+  bool connect();
+  bool connect(int command_port = hrsdk::COMMAND_PORT, int event_port = hrsdk::EVENT_PORT,
+               int file_port = hrsdk::FILE_PORT);
+  void disconnect();
 
   void writeJointCommand(const std::vector<double>& positions, const float goal_time);
   void motionAbort();

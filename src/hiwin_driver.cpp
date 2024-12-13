@@ -49,19 +49,24 @@ HIWINDriver::~HIWINDriver()
 
 bool HIWINDriver::connect()
 {
-  commander_.reset(new hrsdk::Commander(robot_ip_, hrsdk::COMMAND_PORT));
+  return connect(hrsdk::COMMAND_PORT, hrsdk::EVENT_PORT, hrsdk::FILE_PORT);
+}
+
+bool HIWINDriver::connect(int command_port, int event_port, int file_port)
+{
+  commander_.reset(new hrsdk::Commander(robot_ip_, command_port));
   if (!commander_->connect())
   {
     return false;
   }
 
-  event_cb_.reset(new hrsdk::EventCb(robot_ip_, hrsdk::EVENT_PORT));
+  event_cb_.reset(new hrsdk::EventCb(robot_ip_, event_port));
   if (!event_cb_->connect())
   {
     return false;
   }
 
-  file_client_.reset(new hrsdk::FileClient(robot_ip_, hrsdk::FILE_PORT));
+  file_client_.reset(new hrsdk::FileClient(robot_ip_, file_port));
   if (!file_client_->connect())
   {
     return false;

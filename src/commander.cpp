@@ -27,6 +27,7 @@
 // POSSIBILITY OF SUCH DAMAGE.
 
 #include <iostream>
+#include <sstream>
 #include <iomanip>
 #include <vector>
 #include <cstring>

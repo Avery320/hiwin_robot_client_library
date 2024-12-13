@@ -15,6 +15,7 @@ target_include_directories(hrsdk PUBLIC
 $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
 $<INSTALL_INTERFACE:include>
 )
+set_target_properties(hrsdk PROPERTIES CXX_STANDARD 11 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
 
 # Introduce variables:
 # * CMAKE_INSTALL_LIBDIR
