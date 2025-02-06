@@ -64,8 +64,7 @@ public:
   ~HIWINDriver();
 
   bool connect();
-  bool connect(int command_port = hrsdk::COMMAND_PORT, int event_port = hrsdk::EVENT_PORT,
-               int file_port = hrsdk::FILE_PORT);
+  bool connect(int command_port, int event_port, int file_port);
   void disconnect();
 
   void writeJointCommand(const std::vector<double>& positions, const float goal_time);
