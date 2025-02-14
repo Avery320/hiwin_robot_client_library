@@ -31,6 +31,7 @@
 
 #include <string>
 #include <vector>
+#include <memory>
 
 #include <hiwin_robot_client_library/socket/tcp_client.hpp>
 #include <hiwin_robot_client_library/commander.hpp>
@@ -47,13 +48,8 @@ class HIWINDriver
 {
 private:
   std::string robot_ip_;  // IP address of the robot
-  std::string robot_version_;
-
-  bool servoAmpState_;
-  MotionStatus robotStatus_;
-  std::vector<std::string> error_list_;
-
-  double prev_target_joint_positions_[6];
+  std::string version_info_;
+  std::string version_number_;
 
   std::unique_ptr<hrsdk::Commander> commander_;
   std::unique_ptr<hrsdk::EventCb> event_cb_;
@@ -67,8 +63,18 @@ public:
   bool connect(int command_port, int event_port, int file_port);
   void disconnect();
 
-  void writeJointCommand(const std::vector<double>& positions, const float goal_time);
+  void getRobotVersion(std::string& version);
+  bool isVersionGreaterOrEqual(const std::string& requiredVersion);
+
+  void writeJointCommand(const std::vector<double>& positions);
+  void writeTrajectorySplinePoint(const std::vector<double>& positions, const float goal_time);
+  void writeTrajectorySplinePoint(const std::vector<double>& positions, const std::vector<double>& velocities,
+                                  const float goal_time);
+  void writeTrajectorySplinePoint(const std::vector<double>& positions, const std::vector<double>& velocities,
+                                  const std::vector<double>& accelerations, const float goal_time);
+
   void motionAbort();
+  void clearError();
 
   void getJointVelocity(std::vector<double>& velocities);
   void getJointEffort(std::vector<double>& efforts);

@@ -72,8 +72,8 @@ bool HIWINDriver::connect(int command_port, int event_port, int file_port)
     return false;
   }
 
-  commander_->GetRobotVersion(robot_version_);
-  std::cout << robot_version_.c_str() << std::endl;
+  commander_->GetRobotVersion(version_info_);
+  std::cout << version_info_ << std::endl;
 
   commander_->getPermissions();
   commander_->setLogLevel(LogLevels::SetCommand);
@@ -82,16 +82,72 @@ bool HIWINDriver::connect(int command_port, int event_port, int file_port)
   commander_->setPtpSpeed(100);
   commander_->setOverrideRatio(100);
 
-  commander_->getActualPosition(prev_target_joint_positions_);
-
-  servoAmpState_ = true;
-  commander_->setServoAmpState(servoAmpState_);
+  commander_->setServoAmpState(true);
 
   return true;
 }
 
 void HIWINDriver::disconnect()
 {
+}
+
+void HIWINDriver::getRobotVersion(std::string& version)
+{
+  std::regex version_regex(R"(HRDLL (\d+\.\d+\.\d+))");
+  std::smatch match;
+
+  if (std::regex_search(version_info_, match, version_regex))
+  {
+    version_number_ = match[1].str();
+  }
+  else
+  {
+    version_regex = std::regex(R"(HRSS (\d+\.\d+\.\d+))");
+    if (std::regex_search(version_info_, match, version_regex))
+    {
+      version_number_ = match[1].str();
+    }
+    else
+    {
+      version_number_ = "0.0.0";
+    }
+  }
+
+  version = version_number_;
+}
+
+bool HIWINDriver::isVersionGreaterOrEqual(const std::string& requiredVersion)
+{
+  std::vector<int> versionParts, requiredParts;
+
+  std::stringstream versionStream(version_number_);
+  std::stringstream requiredStream(requiredVersion);
+  std::string part;
+
+  while (std::getline(versionStream, part, '.'))
+  {
+    versionParts.push_back(std::stoi(part));
+  }
+  while (std::getline(requiredStream, part, '.'))
+  {
+    requiredParts.push_back(std::stoi(part));
+  }
+
+  for (size_t i = 0; i < std::max(versionParts.size(), requiredParts.size()); ++i)
+  {
+    int versionPart = (i < versionParts.size()) ? versionParts[i] : 0;
+    int requiredPart = (i < requiredParts.size()) ? requiredParts[i] : 0;
+
+    if (versionPart > requiredPart)
+    {
+      return true;
+    }
+    if (versionPart < requiredPart)
+    {
+      return false;
+    }
+  }
+  return true;
 }
 
 void HIWINDriver::getRobotMode(ControlMode& mode)
@@ -106,13 +162,14 @@ bool HIWINDriver::isEstopped()
 
 bool HIWINDriver::isDrivesPowered()
 {
-  commander_->getServoAmpState(servoAmpState_);
-  return servoAmpState_;
+  bool state = false;
+  commander_->getServoAmpState(state);
+  return state;
 }
 
 bool HIWINDriver::isMotionPossible()
 {
-  if (!servoAmpState_ || error_list_.size() || !commander_->isRemoteMode())
+  if (!isDrivesPowered() || !isInError() || !commander_->isRemoteMode())
   {
     return false;
   }
@@ -121,8 +178,10 @@ bool HIWINDriver::isMotionPossible()
 
 bool HIWINDriver::isInMotion()
 {
-  commander_->getMotionState(robotStatus_);
-  if (robotStatus_ == MotionStatus::Moving)
+  MotionStatus robotStatus;
+
+  commander_->getMotionState(robotStatus);
+  if (robotStatus == MotionStatus::Moving)
   {
     return true;
   }
@@ -131,8 +190,10 @@ bool HIWINDriver::isInMotion()
 
 bool HIWINDriver::isInError()
 {
-  commander_->getErrorCode(error_list_);
-  if (error_list_.empty())
+  std::vector<std::string> error_list;
+
+  commander_->getErrorCode(error_list);
+  if (error_list.empty())
   {
     return false;
   }
@@ -141,13 +202,16 @@ bool HIWINDriver::isInError()
 
 void HIWINDriver::getErrorCode(int32_t& error_code)
 {
-  if (error_list_.empty())
+  std::vector<std::string> error_list;
+
+  commander_->getErrorCode(error_list);
+  if (error_list.empty())
   {
     error_code = 0;
     return;
   }
 
-  std::string last_error = error_list_.back();
+  std::string last_error = error_list.back();
 
   std::regex pattern(R"(Err([0-9A-Fa-f]{2})-([0-9A-Fa-f]{2})-([0-9A-Fa-f]{2}))");
   std::smatch matches;
@@ -165,12 +229,14 @@ void HIWINDriver::getErrorCode(int32_t& error_code)
 
 void HIWINDriver::getJointVelocity(std::vector<double>& velocities)
 {
-  if (velocities.size() != 6 && velocities.size() > 9)
+  if (velocities.size() > 9)
   {
     return;
   }
 
   double value[6];
+  double extra_value[3];
+
   if (commander_->getActualRPM(value) != 0)
   {
     return;
@@ -182,14 +248,13 @@ void HIWINDriver::getJointVelocity(std::vector<double>& velocities)
 
   if (velocities.size() > 6)
   {
-    double ext_value[3];
-    if (commander_->getExtActualRPM(ext_value) != 0)
+    if (commander_->getExtActualRPM(extra_value) != 0)
     {
       return;
     }
-    for (size_t i = 0; i < 3; i++)
+    for (size_t i = 0; i < velocities.size() - 6; i++)
     {
-      velocities.at(6 + i) = ext_value[i];
+      velocities.at(6 + i) = extra_value[i];
     }
   }
 
@@ -198,12 +263,13 @@ void HIWINDriver::getJointVelocity(std::vector<double>& velocities)
 
 void HIWINDriver::getJointEffort(std::vector<double>& efforts)
 {
-  double value[6];
-  if (efforts.size() < 6)
+  if (efforts.size() > 9)
   {
     return;
   }
 
+  double value[6];
+  double extra_value[6];
   if (commander_->getActualCurrent(value) != 0)
   {
     return;
@@ -213,17 +279,22 @@ void HIWINDriver::getJointEffort(std::vector<double>& efforts)
     efforts.at(i) = value[i];
   }
 
+  if (efforts.size() > 6)
+  {
+  }
+
   return;
 }
 
 void HIWINDriver::getJointPosition(std::vector<double>& positions)
 {
-  if (positions.size() != 6 && positions.size() > 9)
+  if (positions.size() > 9)
   {
     return;
   }
 
   double value[6];
+  double extra_value[3];
   if (commander_->getActualPosition(value) != 0)
   {
     return;
@@ -235,51 +306,99 @@ void HIWINDriver::getJointPosition(std::vector<double>& positions)
 
   if (positions.size() > 6)
   {
-    double ext_value[3];
-    if (commander_->getExtActualPosition(ext_value) != 0)
+    if (commander_->getExtActualPosition(extra_value) != 0)
     {
       return;
     }
-    for (size_t i = 0; i < 3; i++)
+    for (size_t i = 0; i < positions.size() - 6; i++)
     {
-      positions.at(6 + i) = ext_value[i];
+      positions.at(6 + i) = extra_value[i];
     }
   }
 
   return;
 }
 
-void HIWINDriver::writeJointCommand(const std::vector<double>& positions, const float goal_time)
+void HIWINDriver::writeJointCommand(const std::vector<double>& positions)
 {
-  if (positions.size() != 6 && positions.size() > 9)
+  if (positions.size() > 9)
   {
     return;
   }
 
-  double* value = new double[positions.size()]();
-
-  /*
-   * goal_time
-   * ... TBD.
-   */
-
+  double value[9] = { 0.0 };
   std::copy(positions.begin(), positions.end(), value);
 
-  if (positions.size() == 6)
-  {
-    commander_->ptpJoint(value, 100);
-  }
-  else if (positions.size() == 9)
+  if (positions.size() > 6)
   {
     commander_->extPtpJoint(value);
   }
+  else
+  {
+    commander_->ptpJoint(value);
+  }
+}
 
-  delete[] value;
+void HIWINDriver::writeTrajectorySplinePoint(const std::vector<double>& positions, const float goal_time)
+{
+  if (positions.size() > 9)
+  {
+    return;
+  }
+
+  double p[9] = { 0.0 };
+  std::copy(positions.begin(), positions.end(), p);
+
+  commander_->linearSplinePoint(p, goal_time);
+}
+
+void HIWINDriver::writeTrajectorySplinePoint(const std::vector<double>& positions,
+                                             const std::vector<double>& velocities, const float goal_time)
+{
+  if (positions.size() > 9 || velocities.size() > 9)
+  {
+    return;
+  }
+
+  double p[9] = { 0.0 };
+  std::copy(positions.begin(), positions.end(), p);
+
+  double v[9] = { 0.0 };
+  std::copy(velocities.begin(), velocities.end(), v);
+
+  commander_->CubicSplinePoint(p, v, goal_time);
+}
+
+void HIWINDriver::writeTrajectorySplinePoint(const std::vector<double>& positions,
+                                             const std::vector<double>& velocities,
+                                             const std::vector<double>& accelerations, const float goal_time)
+{
+  if (positions.size() > 9 || velocities.size() > 9 || accelerations.size() > 9)
+  {
+    return;
+  }
+
+  double p[9] = { 0.0 };
+  std::copy(positions.begin(), positions.end(), p);
+
+  double v[9] = { 0.0 };
+  std::copy(velocities.begin(), velocities.end(), v);
+
+  double a[9] = { 0.0 };
+  std::copy(accelerations.begin(), accelerations.end(), a);
+
+  commander_->QuintSplinePoint(p, v, a, goal_time);
 }
 
 void HIWINDriver::motionAbort()
 {
   commander_->motionAbort();
+}
+
+void HIWINDriver::clearError()
+{
+  commander_->clearError();
+  commander_->setServoAmpState(true);
 }
 
 }  // namespace hrsdk

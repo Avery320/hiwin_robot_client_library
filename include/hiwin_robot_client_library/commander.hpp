@@ -29,7 +29,9 @@
 #ifndef HIWIN_ROBOT_CLIENT_LIBRARY_COMMANDER_HPP_
 #define HIWIN_ROBOT_CLIENT_LIBRARY_COMMANDER_HPP_
 
-#include <hiwin_robot_client_library/socket/tcp_client.hpp>
+#include <vector>
+
+#include "hiwin_robot_client_library/socket/tcp_client.hpp"
 
 namespace hrsdk
 {
@@ -74,7 +76,7 @@ public:
 
   int getPermissions();
   int setLogLevel(LogLevels level);
-  int setServoAmpState(bool& enable);
+  int setServoAmpState(bool enable);
   int getServoAmpState(bool& enable);
 
   int getActualRPM(double (&velocities)[6]);
@@ -87,10 +89,17 @@ public:
   int getMotionState(MotionStatus& status);
   int getErrorCode(std::vector<std::string>& error_list);
 
-  int ptpJoint(double* positions, double ratio);
+  int ptpJoint(double* positions);
+  int ptpJoint(double* positions, double acc_time, double ratio);
+  int linearSplinePoint(const double* positions, double goal_time_sec);
+  int CubicSplinePoint(const double* positions, const double* velocities, double goal_time_sec);
+  int QuintSplinePoint(const double* positions, const double* velocities, const double* acceleration,
+                       double goal_time_sec);
   int extPtpJoint(double* positions);
 
   int motionAbort();
+  int clearError();
+
   int setPtpSpeed(int ratio);
   int getPtpSpeed(int& ratio);
   int setOverrideRatio(int ratio);
@@ -99,6 +108,7 @@ public:
   int setRobotMode(ControlMode mode);
   int getRobotMode(ControlMode& mode);
   int GetRobotVersion(std::string& str);
+  int GetHRSSVersion(std::string& str);
 };
 
 }  // namespace hrsdk

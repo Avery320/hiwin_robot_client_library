@@ -64,7 +64,12 @@ enum class CommandId : uint16_t
   GetRobotVersion = 0x057A,
   SetRobotMode = 0x058C,
   GetRobotMode = 0x058D,
-  PtpJoint = 0x07D6,
+  ControllerReset = 0x05AA,
+  PtpJoint = 0x07D2,
+  PtpJointWithVelocity = 0x07D6,
+  LinearSplinePoint = 0x07E8,
+  CubicSplinePoint = 0x07E9,
+  QuinticSplinePoint = 0x07EA,
   ExtPtpJoint = 0x07EF,
   MotionAbort = 0x07FA,
   GetExtActualRPM = 0x0863,
@@ -75,6 +80,7 @@ enum class CommandId : uint16_t
   GetMotionState = 0x086D,
   SetLogLevel = 0x1003,
   GetActualCurrent = 0x100A,
+  GetHRSSVersion = 0x100B,
   GetHrssMode = 0x1036,
 };
 
@@ -179,7 +185,7 @@ int Commander::setLogLevel(LogLevels level)
   return r.result;
 }
 
-int Commander::setServoAmpState(bool& enable)
+int Commander::setServoAmpState(bool enable)
 {
   size_t written;
   Commandformat w = {};
@@ -427,7 +433,7 @@ int Commander::getErrorCode(std::vector<std::string>& error_list)
   return r.result;
 }
 
-int Commander::ptpJoint(double* positions, double ratio)
+int Commander::ptpJoint(double* positions)
 {
   size_t written;
   Commandformat w = {};
@@ -435,8 +441,43 @@ int Commander::ptpJoint(double* positions, double ratio)
 
   w.cmd_id = static_cast<uint16_t>(CommandId::PtpJoint);
 
+  // Smooth on between the points
+  w.param[0] = 1;
+
+  std::string pos_str = "";
+  for (size_t i = 0; i < 6; i++)
+  {
+    if (i != 0)
+    {
+      pos_str += ",";
+    }
+    std::stringstream stream;
+    stream << std::fixed << std::setprecision(7) << (positions[i] * (180 / M_PI));
+    pos_str += stream.str();
+  }
+  w.param[1] = pos_str.length();
+  std::copy(pos_str.begin(), pos_str.end(), &w.param[2]);
+
+  TCPClient::write(data_w, sizeof(Commandformat), written);
+
+  size_t read_chars;
+  Responseformat r = {};
+  uint8_t* data_r = static_cast<uint8_t*>(static_cast<void*>(&r));
+
+  TCPClient::read(data_r, sizeof(Responseformat), read_chars);
+  return r.result;
+}
+
+int Commander::ptpJoint(double* positions, double acc_time, double ratio)
+{
+  size_t written;
+  Commandformat w = {};
+  const uint8_t* data_w = static_cast<const uint8_t*>(static_cast<void*>(&w));
+
+  w.cmd_id = static_cast<uint16_t>(CommandId::PtpJointWithVelocity);
+
   // Acceleration time
-  int32_t acceleration_time = 250000;
+  int32_t acceleration_time = static_cast<int>(std::round(acc_time * 1000));
   memcpy(&w.param[0], &acceleration_time, sizeof(int32_t));
 
   // PTP motion ratio
@@ -500,6 +541,119 @@ int Commander::extPtpJoint(double* positions)
   return r.result;
 }
 
+int Commander::linearSplinePoint(const double* positions, double goal_time_sec)
+{
+  size_t written;
+  Commandformat w = {};
+  const uint8_t* data_w = static_cast<const uint8_t*>(static_cast<void*>(&w));
+
+  w.cmd_id = static_cast<uint16_t>(CommandId::LinearSplinePoint);
+
+  double pos_deg;
+  int32_t deg_integer;
+  for (size_t i = 0; i < 9; i++)
+  {
+    pos_deg = positions[i] * (180 / M_PI) * 1000.0;
+    deg_integer = static_cast<int>(std::round(pos_deg));
+    memcpy(&w.param[(i * 2) + 0], &deg_integer, sizeof(int32_t));
+  }
+
+  int32_t t_integer = static_cast<int>(std::round(goal_time_sec * 1000.0));
+  memcpy(&w.param[18], &t_integer, sizeof(int32_t));
+
+  TCPClient::write(data_w, sizeof(Commandformat), written);
+
+  size_t read_chars;
+  Responseformat r = {};
+  uint8_t* data_r = static_cast<uint8_t*>(static_cast<void*>(&r));
+
+  TCPClient::read(data_r, sizeof(Responseformat), read_chars);
+  return r.result;
+}
+
+int Commander::CubicSplinePoint(const double* positions, const double* velocities, double goal_time_sec)
+{
+  size_t written;
+  Commandformat w = {};
+  const uint8_t* data_w = static_cast<const uint8_t*>(static_cast<void*>(&w));
+
+  w.cmd_id = static_cast<uint16_t>(CommandId::CubicSplinePoint);
+
+  double deg_float;
+  int32_t deg_integer;
+  for (size_t i = 0; i < 9; i++)
+  {
+    deg_float = positions[i] * (180 / M_PI) * 1000.0;
+    deg_integer = static_cast<int>(std::round(deg_float));
+    std::cout << deg_integer << " ";
+    memcpy(&w.param[(i * 2) + 0], &deg_integer, sizeof(int32_t));
+  }
+
+  for (size_t i = 0; i < 9; i++)
+  {
+    deg_float = velocities[i] * (180 / M_PI) * 1000.0;
+    deg_integer = static_cast<int>(std::round(deg_float));
+    memcpy(&w.param[(i * 2) + 18], &deg_integer, sizeof(int32_t));
+  }
+
+  int32_t t_integer = static_cast<int>(std::round(goal_time_sec * 1000.0));
+  memcpy(&w.param[36], &t_integer, sizeof(int32_t));
+
+  TCPClient::write(data_w, sizeof(Commandformat), written);
+
+  size_t read_chars;
+  Responseformat r = {};
+  uint8_t* data_r = static_cast<uint8_t*>(static_cast<void*>(&r));
+
+  TCPClient::read(data_r, sizeof(Responseformat), read_chars);
+  return r.result;
+}
+
+int Commander::QuintSplinePoint(const double* positions, const double* velocities, const double* acceleration,
+                                double goal_time_sec)
+{
+  size_t written;
+  Commandformat w = {};
+  const uint8_t* data_w = static_cast<const uint8_t*>(static_cast<void*>(&w));
+
+  w.cmd_id = static_cast<uint16_t>(CommandId::QuinticSplinePoint);
+
+  double deg_float;
+  int32_t deg_integer;
+  for (size_t i = 0; i < 9; i++)
+  {
+    deg_float = positions[i] * (180 / M_PI) * 1000.0;
+    deg_integer = static_cast<int>(std::round(deg_float));
+    memcpy(&w.param[(i * 2) + 0], &deg_integer, sizeof(int32_t));
+  }
+
+  for (size_t i = 0; i < 9; i++)
+  {
+    deg_float = velocities[i] * (180 / M_PI) * 1000.0;
+    deg_integer = static_cast<int>(std::round(deg_float));
+    memcpy(&w.param[(i * 2) + 18], &deg_integer, sizeof(int32_t));
+  }
+
+  for (size_t i = 0; i < 9; i++)
+  {
+    deg_float = acceleration[i] * (180 / M_PI) * 1000.0;
+    deg_integer = static_cast<int>(std::round(deg_float));
+    memcpy(&w.param[(i * 2) + 36], &deg_integer, sizeof(int32_t));
+  }
+
+  int32_t t_integer = static_cast<int>(std::round(goal_time_sec * 1000.0));
+  memcpy(&w.param[54], &t_integer, sizeof(int32_t));
+
+  TCPClient::write(data_w, sizeof(Commandformat), written);
+
+  size_t read_chars;
+  Responseformat r = {};
+  uint8_t* data_r = static_cast<uint8_t*>(static_cast<void*>(&r));
+
+  TCPClient::read(data_r, sizeof(Responseformat), read_chars);
+  return r.result;
+}
+
 int Commander::motionAbort()
 {
   size_t written;
@@ -507,6 +661,23 @@ int Commander::motionAbort()
   const uint8_t* data_w = static_cast<const uint8_t*>(static_cast<void*>(&w));
 
   w.cmd_id = static_cast<uint16_t>(CommandId::MotionAbort);
+  TCPClient::write(data_w, sizeof(Commandformat), written);
+
+  size_t read_chars;
+  Responseformat r = {};
+  uint8_t* data_r = static_cast<uint8_t*>(static_cast<void*>(&r));
+
+  TCPClient::read(data_r, sizeof(Responseformat), read_chars);
+  return r.result;
+}
+
+int Commander::clearError()
+{
+  size_t written;
+  Commandformat w = {};
+  const uint8_t* data_w = static_cast<const uint8_t*>(static_cast<void*>(&w));
+
+  w.cmd_id = static_cast<uint16_t>(CommandId::ControllerReset);
   TCPClient::write(data_w, sizeof(Commandformat), written);
 
   size_t read_chars;
@@ -669,6 +840,33 @@ int Commander::GetRobotVersion(std::string& str)
   {
     str += r.data[i + 2];
   }
+  return r.result;
+}
+
+int Commander::GetHRSSVersion(std::string& str)
+{
+  size_t written;
+  Commandformat w = {};
+  const uint8_t* data_w = static_cast<const uint8_t*>(static_cast<void*>(&w));
+
+  w.cmd_id = static_cast<uint16_t>(CommandId::GetHRSSVersion);
+  TCPClient::write(data_w, sizeof(Commandformat), written);
+
+  size_t read_chars;
+  Responseformat r = {};
+  uint8_t* data_r = static_cast<uint8_t*>(static_cast<void*>(&r));
+
+  TCPClient::read(data_r, sizeof(Responseformat), read_chars);
+  if (r.result != 0)
+  {
+    return r.result;
+  }
+
+  std::stringstream ss;
+  ss << r.data[2] << "." << r.data[3] << "." << static_cast<char>(r.data[4]) << "_" << r.data[5];
+
+  str = ss.str();
+
   return r.result;
 }
 
