@@ -29,7 +29,9 @@
 #include <regex>
 #include <iostream>
 #include <cstring>
+#include <sys/types.h>
 #include <sys/socket.h>
+#include <netinet/in.h>
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <bits/stdc++.h>
@@ -399,6 +401,43 @@ void HIWINDriver::clearError()
 {
   commander_->clearError();
   commander_->setServoAmpState(true);
+}
+
+bool hrsdk::HIWINDriver::setDO_Modbus(const std::string& ip, int port, int do_index, bool value) {
+    int sock = ::socket(AF_INET, SOCK_STREAM, 0);
+    if (sock < 0) return false;
+
+    struct sockaddr_in server_addr;
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_port = htons(port);
+    inet_pton(AF_INET, ip.c_str(), &server_addr.sin_addr);
+
+    if (::connect(sock, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
+        ::close(sock);
+        return false;
+    }
+
+    // Modbus TCP Write Single Coil (Function code 0x05)
+    uint8_t req[12] = {
+        0x00, 0x01, // Transaction ID
+        0x00, 0x00, // Protocol ID
+        0x00, 0x06, // Length
+        0x01,       // Unit ID
+        0x05,       // Function code
+        (uint8_t)((do_index >> 8) & 0xFF), (uint8_t)(do_index & 0xFF), // Coil Address
+        value ? 0xFF : 0x00, 0x00 // Value: 0xFF00=ON, 0x0000=OFF
+    };
+
+    ssize_t sent = ::send(sock, req, 12, 0);
+    if (sent != 12) {
+        ::close(sock);
+        return false;
+    }
+
+    uint8_t resp[12];
+    ssize_t recvd = ::recv(sock, resp, 12, 0);
+    ::close(sock);
+    return recvd >= 12;
 }
 
 }  // namespace hrsdk

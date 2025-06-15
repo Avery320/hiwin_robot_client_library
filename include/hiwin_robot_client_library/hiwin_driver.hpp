@@ -86,6 +86,8 @@ public:
   bool isMotionPossible();
   bool isInMotion();
   bool isInError();
+
+  bool setDO_Modbus(const std::string& ip, int port, int do_index, bool value);
 };
 
 }  // namespace hrsdk

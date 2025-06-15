@@ -1,19 +1,12 @@
 <?xml version="1.0"?>
-<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
-<package format="3">
+<package format="2">
   <name>hiwin_robot_client_library</name>
-  <version>0.0.0</version>
-  <description>The hiwin_robot_client_library package</description>
+  <version>0.0.3</version>
+  <description>HIWIN Robot Client Library (catkinized)</description>
   <maintainer email="hiwin_robot@hiwin.tw">HIWIN Technologies Corp</maintainer>
-  <license>BSD-3-Clause</license>
   <license>Apache-2.0</license>
-
-  <buildtool_depend>cmake</buildtool_depend>
-
-  <exec_depend condition="$ROS_VERSION == 1">catkin</exec_depend>
-  <exec_depend condition="$ROS_VERSION == 2">ament_cmake</exec_depend>
-
-  <export>
-    <build_type>cmake</build_type>
-  </export>
+  <buildtool_depend>catkin</buildtool_depend>
+  <build_depend>roscpp</build_depend>
+  <build_export_depend>roscpp</build_export_depend>
+  <exec_depend>roscpp</exec_depend>
 </package>
